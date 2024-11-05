@@ -1,6 +1,8 @@
 from typing import List
 from .rankers import LlmRanker, SearchResult
 import openai
+from openai import OpenAI
+
 import time
 import re
 from transformers import T5Tokenizer, T5ForConditionalGeneration, AutoConfig, AutoModelForCausalLM, AutoTokenizer
@@ -306,7 +308,8 @@ class SetwiseLlmRanker(LlmRanker):
                 results.append(SearchResult(docid=doc.docid, score=-rank, text=None))
                 rank += 1
 
-        return results
+        print(f"Total compare: {self.total_compare}, Total prompt tokens: {self.total_prompt_tokens}, Total completion tokens: {self.total_completion_tokens}")
+        return results, {"total_compare": self.total_compare, "total_prompt_tokens": self.total_prompt_tokens, "total_completion_tokens": self.total_completion_tokens}
 
     def truncate(self, text, length):
         return self.tokenizer.convert_tokens_to_string(self.tokenizer.tokenize(text)[:length])
@@ -323,7 +326,7 @@ class OpenAiSetwiseLlmRanker(SetwiseLlmRanker):
         self.total_prompt_tokens = 0
         self.total_completion_tokens = 0
         self.system_prompt = "You are RankGPT, an intelligent assistant specialized in selecting the most relevant passage from a pool of passages based on their relevance to the query."
-        openai.api_key = api_key
+        self.client = OpenAI(api_key=api_key)
 
     def compare(self, query: str, docs: List):
         self.total_compare += 1
@@ -333,20 +336,18 @@ class OpenAiSetwiseLlmRanker(SetwiseLlmRanker):
 
         while True:
             try:
-                response = openai.ChatCompletion.create(
-                    model=self.llm,
-                    messages=[
-                        {"role": "system", "content": self.system_prompt},
-                        {"role": "user", "content": input_text},
-                    ],
-                    temperature=0.0,
-                    request_timeout=15
-                )
+                response = self.client.chat.completions.create(model=self.llm,
+                messages=[
+                    {"role": "system", "content": self.system_prompt},
+                    {"role": "user", "content": input_text},
+                ],
+                temperature=0.0,
+                timeout=15)
 
-                self.total_completion_tokens += int(response['usage']['completion_tokens'])
-                self.total_prompt_tokens += int(response['usage']['prompt_tokens'])
+                self.total_completion_tokens += int(response.usage.completion_tokens)
+                self.total_prompt_tokens += int(response.usage.prompt_tokens)
 
-                output = response['choices'][0]['message']['content']
+                output = response.choices[0].message.content
                 matches = re.findall(r"(Passage [A-Z])", output, re.MULTILINE)
                 if matches:
                     output = matches[0][8]
@@ -357,37 +358,27 @@ class OpenAiSetwiseLlmRanker(SetwiseLlmRanker):
                     output = "A"
                 return output
 
-            except openai.error.APIError as e:
+            except openai.APIError as e:
                 # Handle API error here, e.g. retry or log
                 print(f"OpenAI API returned an API Error: {e}")
                 time.sleep(5)
                 continue
-            except openai.error.APIConnectionError as e:
-                # Handle connection error here
-                print(f"Failed to connect to OpenAI API: {e}")
-                time.sleep(5)
-                continue
-            except openai.error.RateLimitError as e:
+            except openai.RateLimitError as e:
                 # Handle rate limit error (we recommend using exponential backoff)
                 print(f"OpenAI API request exceeded rate limit: {e}")
                 time.sleep(5)
                 continue
-            except openai.error.InvalidRequestError as e:
+            except openai.BadRequestError as e:
                 # Handle invalid request error
                 print(f"OpenAI API request was invalid: {e}")
                 raise e
-            except openai.error.AuthenticationError as e:
+            except openai.AuthenticationError as e:
                 # Handle authentication error
                 print(f"OpenAI API request failed authentication: {e}")
                 raise e
-            except openai.error.Timeout as e:
+            except openai.APITimeoutError as e:
                 # Handle timeout error
                 print(f"OpenAI API request timed out: {e}")
-                time.sleep(5)
-                continue
-            except openai.error.ServiceUnavailableError as e:
-                # Handle service unavailable error
-                print(f"OpenAI API request failed with a service unavailable error: {e}")
                 time.sleep(5)
                 continue
             except Exception as e:

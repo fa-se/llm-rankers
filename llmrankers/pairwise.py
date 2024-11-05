@@ -10,6 +10,9 @@ from torch.utils.data import Dataset, DataLoader
 from transformers import DataCollatorWithPadding
 import tiktoken
 import openai
+from openai import OpenAI
+
+client = OpenAI(api_key=api_key)
 import time
 import re
 
@@ -375,24 +378,21 @@ Passage A: "{doc1}"
 Passage B: "{doc2}"
 
 Output Passage A or Passage B:"""
-        openai.api_key = api_key
 
     def _get_response(self, input_text):
         while True:
             try:
-                response = openai.ChatCompletion.create(
-                    model=self.llm,
-                    messages=[
-                        {"role": "system", "content": self.system_prompt},
-                        {"role": "user", "content": input_text},
-                    ],
-                    temperature=0.0,
-                    request_timeout=15
-                )
-                self.total_completion_tokens += int(response['usage']['completion_tokens'])
-                self.total_prompt_tokens += int(response['usage']['prompt_tokens'])
+                response = client.chat.completions.create(model=self.llm,
+                messages=[
+                    {"role": "system", "content": self.system_prompt},
+                    {"role": "user", "content": input_text},
+                ],
+                temperature=0.0,
+                request_timeout=15)
+                self.total_completion_tokens += int(response.usage.completion_tokens)
+                self.total_prompt_tokens += int(response.usage.prompt_tokens)
 
-                output = response['choices'][0]['message']['content']
+                output = response.choices[0].message.content
                 matches = re.findall(r"(Passage [A-B])", output, re.MULTILINE)
                 if matches:
                     output = matches[0][8]
@@ -403,35 +403,35 @@ Output Passage A or Passage B:"""
                     output = "A"
                 return output
 
-            except openai.error.APIError as e:
+            except openai.APIError as e:
                 # Handle API error here, e.g. retry or log
                 print(f"OpenAI API returned an API Error: {e}")
                 time.sleep(5)
                 continue
-            except openai.error.APIConnectionError as e:
+            except openai.APIConnectionError as e:
                 # Handle connection error here
                 print(f"Failed to connect to OpenAI API: {e}")
                 time.sleep(5)
                 continue
-            except openai.error.RateLimitError as e:
+            except openai.RateLimitError as e:
                 # Handle rate limit error (we recommend using exponential backoff)
                 print(f"OpenAI API request exceeded rate limit: {e}")
                 time.sleep(5)
                 continue
-            except openai.error.InvalidRequestError as e:
+            except openai.InvalidRequestError as e:
                 # Handle invalid request error
                 print(f"OpenAI API request was invalid: {e}")
                 raise e
-            except openai.error.AuthenticationError as e:
+            except openai.AuthenticationError as e:
                 # Handle authentication error
                 print(f"OpenAI API request failed authentication: {e}")
                 raise e
-            except openai.error.Timeout as e:
+            except openai.Timeout as e:
                 # Handle timeout error
                 print(f"OpenAI API request timed out: {e}")
                 time.sleep(5)
                 continue
-            except openai.error.ServiceUnavailableError as e:
+            except openai.ServiceUnavailableError as e:
                 # Handle service unavailable error
                 print(f"OpenAI API request failed with a service unavailable error: {e}")
                 time.sleep(5)
