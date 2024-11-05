@@ -1,4 +1,11 @@
 # llm-rankers
+This project is based on work by Zhuang et al. and is licensed under the Apache License, Version 2.0. The original repository can be found [here](https://github.com/ielab/llm-rankers).
+
+## Modifications
+- modified to work with newer versions of the OpenAI python package
+
+
+
 Pointwise, Listwise, Pairwise and [Setwise](https://arxiv.org/pdf/2310.09497.pdf) Document Ranking with Large Language Models.
 > Note: The current code base only supports T5-style open-source LLMs, and OpenAI APIs for several methods. We are in the process of implementing support for more LLMs.
 
