@@ -2,7 +2,9 @@ import tiktoken
 from .rankers import LlmRanker, SearchResult
 from typing import List
 import copy
-import openai
+from openai import OpenAI
+
+client = OpenAI(api_key=api_key)
 import torch
 from transformers import T5Tokenizer, T5ForConditionalGeneration, AutoTokenizer, AutoModelForCausalLM, AutoConfig
 
@@ -151,7 +153,6 @@ class OpenAiListwiseLlmRanker(LlmRanker):
         self.window_size = window_size
         self.step_size = step_size
         self.num_repeat = num_repeat
-        openai.api_key = api_key
         self.total_compare = 0
         self.total_prompt_tokens = 0
         self.total_completion_tokens = 0
@@ -161,14 +162,13 @@ class OpenAiListwiseLlmRanker(LlmRanker):
         messages = create_permutation_instruction_chat(query, docs, self.llm)
         while True:
             try:
-                completion = openai.ChatCompletion.create(
-                    model=self.llm,
-                    messages=messages,
-                    temperature=0.0,
-                    request_timeout=15)
-                self.total_completion_tokens += int(completion['usage']['completion_tokens'])
-                self.total_prompt_tokens += int(completion['usage']['prompt_tokens'])
-                return completion['choices'][0]['message']['content']
+                completion = client.chat.completions.create(model=self.llm,
+                messages=messages,
+                temperature=0.0,
+                request_timeout=15)
+                self.total_completion_tokens += int(completion.usage.completion_tokens)
+                self.total_prompt_tokens += int(completion.usage.prompt_tokens)
+                return completion.choices[0].message.content
             except Exception as e:
                 print(str(e))
                 if "This model's maximum context length is" in str(e):
