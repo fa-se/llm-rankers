@@ -48,10 +48,6 @@ class SetwiseLlmRanker(LlmRanker):
                                                            return_tensors="pt",
                                                            add_special_tokens=False).to(self.device) if self.tokenizer else None
 
-            test = []
-            for i in range(len(self.CHARACTERS)):
-                test.append(f'<pad> Passage {self.CHARACTERS[i]}')
-
             self.target_token_ids = self.tokenizer.batch_encode_plus([f'<pad> Passage {self.CHARACTERS[i]}'
                                                                       for i in range(len(self.CHARACTERS))],
                                                                      return_tensors="pt",
@@ -67,6 +63,8 @@ class SetwiseLlmRanker(LlmRanker):
                                                             torch_dtype=torch.float16 if device == 'cuda'
                                                             else torch.float32,
                                                             cache_dir=cache_dir).eval()
+        else:
+            raise NotImplementedError(f"Model type {self.config.model_type} is not supported yet for setwise:(")
 
         self.scoring = scoring
         self.method = method
@@ -173,8 +171,6 @@ class SetwiseLlmRanker(LlmRanker):
 
                 output = self.tokenizer.decode(output_ids[input_ids.shape[1]:],
                                                skip_special_tokens=True).strip().upper()
-            else:
-                raise NotImplementedError
 
         elif self.scoring == 'likelihood':
             if self.config.model_type == 't5':
@@ -236,30 +232,10 @@ class SetwiseLlmRanker(LlmRanker):
         self.total_compare = 0
         self.total_completion_tokens = 0
         self.total_prompt_tokens = 0
+        
         if self.method == "heapsort":
             self.heapSort(ranking, query, self.k)
             ranking = list(reversed(ranking))
-
-        # elif self.method == "bubblesort":
-        #     for i in range(k):
-        #         start_ind = len(ranking) - (self.num_child + 1)
-        #         end_ind = len(ranking)
-        #         while True:
-        #             if start_ind < i:
-        #                 start_ind = i
-        #             output = self.compare(query, ranking[start_ind:end_ind])
-        #             try:
-        #                 best_ind = self.CHARACTERS.index(output)
-        #             except ValueError:
-        #                 best_ind = 0
-        #             if best_ind != 0:
-        #                 ranking[start_ind], ranking[start_ind + best_ind] = ranking[start_ind + best_ind], ranking[start_ind]
-        #
-        #             if start_ind == i:
-        #                 break
-        #
-        #             start_ind -= self.num_child
-        #             end_ind -= self.num_child
         elif self.method == "bubblesort":
             last_start = len(ranking) - (self.num_child + 1)
 
@@ -291,6 +267,28 @@ class SetwiseLlmRanker(LlmRanker):
 
                     start_ind -= self.num_child
                     end_ind -= self.num_child
+                    
+        ##  this is a bit slower but standard bobblesort implementation, keep here FYI
+        # elif self.method == "bubblesort":
+        #     for i in range(k):
+        #         start_ind = len(ranking) - (self.num_child + 1)
+        #         end_ind = len(ranking)
+        #         while True:
+        #             if start_ind < i:
+        #                 start_ind = i
+        #             output = self.compare(query, ranking[start_ind:end_ind])
+        #             try:
+        #                 best_ind = self.CHARACTERS.index(output)
+        #             except ValueError:
+        #                 best_ind = 0
+        #             if best_ind != 0:
+        #                 ranking[start_ind], ranking[start_ind + best_ind] = ranking[start_ind + best_ind], ranking[start_ind]
+        #
+        #             if start_ind == i:
+        #                 break
+        #
+        #             start_ind -= self.num_child
+        #             end_ind -= self.num_child
 
         else:
             raise NotImplementedError(f'Method {self.method} is not implemented.')

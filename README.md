@@ -5,7 +5,7 @@ This project is based on work by Zhuang et al. and is licensed under the Apache 
 
 # llm-rankers
 Pointwise, Listwise, Pairwise and [Setwise](https://arxiv.org/pdf/2310.09497.pdf) Document Ranking with Large Language Models.
-> Note: The current code base only supports T5-style open-source LLMs, and OpenAI APIs for several methods. We are in the process of implementing support for more LLMs.
+> Our Setwise paper has been accepted at SIGIR2024!
 
 ---
 ## Installation
@@ -33,7 +33,30 @@ accelerate==0.22.0
 > Note the code base is tested with python=3.9 conda environment. You may also need to install some pyserini dependencies such as faiss. We refer to pyserini installation doc [link](https://github.com/castorini/pyserini/blob/master/docs/installation.md#development-installation)
 
 ---
-## First-stage runs
+
+## Python code example:
+
+```Python
+from llmrankers.setwise import SetwiseLlmRanker
+from llmrankers.rankers import SearchResult
+
+docs = [SearchResult(docid=i, text=f'this is passage {i}', score=None) for i in range(100)]
+query = 'Give me passage 34'
+
+ranker = SetwiseLlmRanker(model_name_or_path='google/flan-t5-large',
+                          tokenizer_name_or_path='google/flan-t5-large',
+                          device='cuda',
+                          num_child=10,
+                          scoring='generation',
+                          method='heapsort',
+                          k=10)
+
+print(ranker.rerank(query, docs)[0])
+```
+---
+
+## Experiment examples (TREC DL and BEIR)
+### First-stage runs
 We use LLMs to re-rank top documents retrieved by a first-stage retriever. In this repo we take BM25 as the retriever.
 
 We rely on [pyserini](https://github.com/castorini/pyserini) IR toolkit to get BM25 ranking. 
@@ -65,29 +88,7 @@ In this repository, we use DL 2019 as an example. That is, we always re-rank `ru
 
 --- 
 
-## Prompting Methods for zero-shot document ranking with LLMs
-
-### Python code example:
-
-```Python
-from llmrankers.setwise import SetwiseLlmRanker
-from llmrankers.rankers import SearchResult
-
-docs = [SearchResult(docid=i, text=f'this is passage {i}', score=None) for i in range(100)]
-query = 'Give me passage 34'
-
-ranker = SetwiseLlmRanker(model_name_or_path='google/flan-t5-large',
-                          tokenizer_name_or_path='google/flan-t5-large',
-                          device='cuda',
-                          num_child=10,
-                          scoring='generation',
-                          method='heapsort',
-                          k=10)
-
-print(ranker.rerank(query, docs)[0])
-```
----
-### Command lines examples:
+### Re-rank first stage run with LLMs
 
 <details>
 <summary>Pointwise</summary>
@@ -358,25 +359,27 @@ ndcg_cut_10             all     0.7675
 
 ---
 
-## References
-[1] Devendra Sachan, Mike Lewis, Mandar Joshi, Armen Aghajanyan, Wen-tau Yih, Joelle Pineau, and Luke Zettlemoyer. 2022. Improving Passage Retrieval with Zero-Shot Question Generation
+## 🫡 References
+[1] Devendra Sachan, Mike Lewis, Mandar Joshi, Armen Aghajanyan, Wen-tau Yih, Joelle Pineau, and Luke Zettlemoyer, *Improving Passage Retrieval with Zero-Shot Question Generation*, EMNLP 2022
 
-[2] Weiwei Sun,Lingyong Yan,Xinyu Ma,Pengjie Ren,Dawei Yin,and Zhaochun Ren. 2023. Is ChatGPT Good at Search? 
+[2] Weiwei Sun,Lingyong Yan,Xinyu Ma,Pengjie Ren,Dawei Yin,and Zhaochun Ren, Is ChatGPT Good at Search? *Investigating Large Language Models as Re-Ranking Agents*, EMNLP 2023
 
-[3] Shengyao Zhuang, Honglei Zhuang, Bevan Koopman, and Guido Zuccon. 2023. A Setwise Approach for Effective and Highly Efficient Zero-shot Ranking with Large Language Models
+[3] Shengyao Zhuang, Honglei Zhuang, Bevan Koopman, and Guido Zuccon, *A Setwise Approach for Effective and Highly Efficient Zero-shot Ranking with Large Language Models*, SIGIR 2024
 
-[4] Zhen Qin, Rolf Jagerman, Kai Hui, Honglei Zhuang, Junru Wu, Jiaming Shen, Tianqi Liu, Jialu Liu, Donald Metzler, Xuanhui Wang, and Michael Bendersky. 2023. Large language models are effective text rankers with pairwise ranking prompting
+[4] Zhen Qin, Rolf Jagerman, Kai Hui, Honglei Zhuang, Junru Wu, Jiaming Shen, Tianqi Liu, Jialu Liu, Donald Metzler, Xuanhui Wang, and Michael Bendersky, *Large Language Models are Effective Text Rankers with Pairwise Ranking Prompting*, Findings: NAACL 2024
 
 
 
 ---
-If you used our code for your research, please consider to cite our paper:
+## 🙏 Citation
 
-```text
-@article{zhuang2023setwise,
-  title={A Setwise Approach for Effective and Highly Efficient Zero-shot Ranking with Large Language Models},
-  author={Zhuang, Shengyao and Zhuang, Honglei and Koopman, Bevan and Zuccon, Guido},
-  journal={arXiv preprint arXiv:2310.09497},
-  year={2023}
+```bibtex
+@inproceedings{zhuang2024setwise,
+    author={Zhuang, Shengyao and Zhuang, Honglei and Koopman, Bevan and Zuccon, Guido},
+    title={A Setwise Approach for Effective and Highly Efficient Zero-shot Ranking with Large Language Models},
+    booktitle = {Proceedings of the 47th International ACM SIGIR Conference on Research and Development in Information Retrieval},
+    year = {2024},
+    series = {SIGIR '24}
 }
+
 ```
