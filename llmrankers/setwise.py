@@ -314,9 +314,19 @@ class SetwiseLlmRanker(LlmRanker):
 
 
 class OpenAiSetwiseLlmRanker(SetwiseLlmRanker):
-    def __init__(self, model_name_or_path, api_key, num_child=3, method='heapsort', k=10):
+    def __init__(self, model_name_or_path, api_key, num_child=3, method='heapsort', k=10,
+                 temperature=0.0, reasoning_effort=None):
         self.llm = model_name_or_path
-        self.tokenizer = tiktoken.encoding_for_model(model_name_or_path)
+        try:
+            self.tokenizer = tiktoken.encoding_for_model(model_name_or_path)
+        except KeyError:
+            # tiktoken doesn't know newer model names (e.g. gpt-6-*). The tokenizer is only used by truncate() in run.py,
+            # so an approximate encoding is good enough.
+            self.tokenizer = tiktoken.get_encoding("o200k_base")
+        # None omits the parameter from the request (reasoning models may reject temperature; older models reject
+        # reasoning_effort)
+        self.temperature = temperature
+        self.reasoning_effort = reasoning_effort
         self.num_child = num_child
         self.method = method
         self.k = k
@@ -332,6 +342,12 @@ class OpenAiSetwiseLlmRanker(SetwiseLlmRanker):
         input_text = f'Given a query "{query}", which of the following passages is the most relevant one to the query?\n\n' \
                      + passages + '\n\nOutput only the passage label of the most relevant passage.'
 
+        optional_params = {}
+        if self.temperature is not None:
+            optional_params["temperature"] = self.temperature
+        if self.reasoning_effort is not None:
+            optional_params["reasoning_effort"] = self.reasoning_effort
+
         while True:
             try:
                 response = self.client.chat.completions.create(model=self.llm,
@@ -339,8 +355,8 @@ class OpenAiSetwiseLlmRanker(SetwiseLlmRanker):
                     {"role": "system", "content": self.system_prompt},
                     {"role": "user", "content": input_text},
                 ],
-                temperature=0.0,
-                timeout=15)
+                timeout=15,
+                **optional_params)
 
                 self.total_completion_tokens += int(response.usage.completion_tokens)
                 self.total_prompt_tokens += int(response.usage.prompt_tokens)
@@ -350,17 +366,12 @@ class OpenAiSetwiseLlmRanker(SetwiseLlmRanker):
                 if matches:
                     output = matches[0][8]
                 elif output.strip() in self.CHARACTERS:
-                    pass
+                    output = output.strip()
                 else:
                     print(f"Unexpected output: {output}")
                     output = "A"
                 return output
 
-            except openai.APIError as e:
-                # Handle API error here, e.g. retry or log
-                print(f"OpenAI API returned an API Error: {e}")
-                time.sleep(5)
-                continue
             except openai.RateLimitError as e:
                 # Handle rate limit error (we recommend using exponential backoff)
                 print(f"OpenAI API request exceeded rate limit: {e}")
@@ -377,6 +388,19 @@ class OpenAiSetwiseLlmRanker(SetwiseLlmRanker):
             except openai.APITimeoutError as e:
                 # Handle timeout error
                 print(f"OpenAI API request timed out: {e}")
+                time.sleep(5)
+                continue
+            except openai.APIStatusError as e:
+                # Other 4xx errors (e.g. unknown model) won't succeed on retry
+                if e.status_code < 500:
+                    print(f"OpenAI API returned an API Error: {e}")
+                    raise e
+                print(f"OpenAI API returned an API Error: {e}")
+                time.sleep(5)
+                continue
+            except openai.APIError as e:
+                # Must come after its subclasses above, otherwise it swallows non-retryable errors and retries forever
+                print(f"OpenAI API returned an API Error: {e}")
                 time.sleep(5)
                 continue
             except Exception as e:
